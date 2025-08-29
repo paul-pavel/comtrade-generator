@@ -1,0 +1,47 @@
+[
+  {
+    "name": "Синус",
+    "params": [
+      { "label": "Амплитуда", "key": "amplitude", "default": 1.0 },
+      { "label": "Частота (Гц)", "key": "frequency", "default": 5.0 },
+      { "label": "Фаза (°)", "key": "phase", "default": 0.0 }
+    ],
+    "equation": "amplitude * numpy.sin(2 * numpy.pi * frequency * time + phase_rad)"
+  },
+  {
+    "name": "Косинус",
+    "params": [
+      { "label": "Амплитуда", "key": "amplitude", "default": 1.0 },
+      { "label": "Частота (Гц)", "key": "frequency", "default": 5.0 },
+      { "label": "Фаза (°)", "key": "phase", "default": 0.0 }
+    ],
+    "equation": "amplitude * numpy.cos(2 * numpy.pi * frequency * time + phase_rad)"
+  },
+  {
+    "name": "Прямоугольный",
+    "params": [
+      { "label": "Амплитуда", "key": "amplitude", "default": 1.0 },
+      { "label": "Частота (Гц)", "key": "frequency", "default": 5.0 },
+      { "label": "Фаза (°)", "key": "phase", "default": 0.0 }
+    ],
+    "equation": "amplitude * numpy.sign(numpy.sin(2 * numpy.pi * frequency * time + phase_rad))"
+  },
+  {
+    "name": "Пилообразный",
+    "params": [
+      { "label": "Амплитуда", "key": "amplitude", "default": 1.0 },
+      { "label": "Частота (Гц)", "key": "frequency", "default": 1.0 }
+    ],
+    "equation": "amplitude * (2 * (time * frequency - numpy.floor(0.5 + time * frequency)))"
+  },
+  {
+    "name": "Затухающий синус",
+    "params": [
+      { "label": "Амплитуда", "key": "amplitude", "default": 5.0 },
+      { "label": "Частота (Гц)", "key": "frequency", "default": 5.0 },
+      { "label": "Фаза (°)", "key": "phase", "default": 0.0 },
+      { "label": "Затухание", "key": "damping", "default": 0.5 }
+    ],
+    "equation": "amplitude * numpy.exp(-damping * time) * numpy.sin(2 * numpy.pi * frequency * time + phase_rad)"
+  }
+]
