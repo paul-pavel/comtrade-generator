@@ -1,11 +1,17 @@
+from __future__ import annotations
+
 import json
-from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
-                               QComboBox, QDoubleSpinBox, QLineEdit, QPushButton)
+from typing import Dict, Any, List, Tuple
+from PySide6.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel,
+    QComboBox, QDoubleSpinBox, QLineEdit, QPushButton
+)
 
 class ParamsWidget(QWidget):
-    def __init__(self, parent=None):
+    def __init__(self, parent=None) -> None:  # type: ignore[override]
         super().__init__(parent)
-        self.param_spinboxes = {}
+        self.param_spinboxes: Dict[str, QDoubleSpinBox] = {}
+        self.signal_configs: List[Dict[str, Any]] = []
         self.load_signal_configs()
 
         main_layout = QVBoxLayout(self)
@@ -43,14 +49,14 @@ class ParamsWidget(QWidget):
 
         self.update_param_fields()
 
-    def load_signal_configs(self):
+    def load_signal_configs(self) -> None:
         try:
             with open('signal_types.json', 'r', encoding='utf-8') as f:
                 self.signal_configs = json.load(f)
         except FileNotFoundError:
             self.signal_configs = []
 
-    def update_param_fields(self):
+    def update_param_fields(self) -> None:
         # Очистка старых полей
         while self.params_container_layout.count():
             item = self.params_container_layout.takeAt(0)
@@ -89,8 +95,8 @@ class ParamsWidget(QWidget):
             self.params_container_layout.addLayout(layout)
             self.param_spinboxes[key] = spinner
 
-    def get_params_and_equation(self):
-        params = {
+    def get_params_and_equation(self) -> Tuple[Dict[str, Any], str]:
+        params: Dict[str, Any] = {
             "name": self.name_edit.text(),
             "type": self.signal_type_combo.currentText()
         }
@@ -99,17 +105,18 @@ class ParamsWidget(QWidget):
         
         selected_signal_name = self.signal_type_combo.currentText()
         config = next((c for c in self.signal_configs if c['name'] == selected_signal_name), None)
-        equation = config.get('equation', '0') if config else '0'
+        equation: str = config.get('equation', '0') if config else '0'
 
         return params, equation
 
-    def set_params(self, params):
-        self.name_edit.setText(params.get("name", ""))
-        self.signal_type_combo.setCurrentText(params.get("type", ""))
-        # Обновление полей произойдет через сигнал, но значения нужно выставить после
+    def set_params(self, params: Dict[str, Any]) -> None:
+        self.name_edit.setText(str(params.get("name", "")))
+        type_value = params.get("type", "")
+        if isinstance(type_value, str):
+            self.signal_type_combo.setCurrentText(type_value)
         self.signal_type_combo.blockSignals(True)
         self.update_param_fields()
         for key, spinner in self.param_spinboxes.items():
-            if key in params:
-                spinner.setValue(params[key])
+            if key in params and isinstance(params[key], (int, float)):
+                spinner.setValue(float(params[key]))
         self.signal_type_combo.blockSignals(False)

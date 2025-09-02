@@ -1,5 +1,10 @@
-from PySide6.QtWidgets import (QDockWidget, QWidget, QVBoxLayout, QHBoxLayout, 
-                               QCheckBox, QScrollArea, QPushButton, QColorDialog)
+from __future__ import annotations
+
+from typing import Dict, Callable
+from PySide6.QtWidgets import (
+    QDockWidget, QWidget, QVBoxLayout, QHBoxLayout,
+    QCheckBox, QScrollArea, QPushButton, QColorDialog
+)
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 from functools import partial
@@ -10,13 +15,13 @@ from signal_model import Signal
 from signal_library import SignalLibrary
 
 class PlotView(QDockWidget):
-    def __init__(self, title, parent, signal_library: SignalLibrary):
+    def __init__(self, title: str, parent, signal_library: SignalLibrary):  # type: ignore[override]
         super().__init__(title, parent)
-        self.signal_library = signal_library
-        self.signal_plot_items = {} # {Signal: plot_item}
-        self.checkboxes = {} # {Signal: QCheckBox}
-        self.color_buttons = {} # {Signal: QPushButton}
-        self.signal_connections = {} # {Signal: connection}
+        self.signal_library: SignalLibrary = signal_library
+        self.signal_plot_items: Dict[Signal, pg.PlotDataItem] = {}
+        self.checkboxes: Dict[Signal, QCheckBox] = {}
+        self.color_buttons: Dict[Signal, QPushButton] = {}
+        self.signal_connections: Dict[Signal, Callable[[], None]] = {}
 
         main_dock_widget = QWidget()
         self.setWidget(main_dock_widget)
@@ -50,7 +55,7 @@ class PlotView(QDockWidget):
         for signal in self.signal_library.get_all_signals():
             self._add_signal_widget(signal)
 
-    def _add_signal_widget(self, signal: Signal):
+    def _add_signal_widget(self, signal: Signal) -> None:
         """Добавляет виджет для управления сигналом."""
         if signal in self.checkboxes:
             return
@@ -79,7 +84,7 @@ class PlotView(QDockWidget):
         signal.updated.connect(connection)
         self.signal_connections[signal] = connection
 
-    def _remove_signal_widget(self, signal: Signal):
+    def _remove_signal_widget(self, signal: Signal) -> None:
         """Удаляет виджет для управления сигналом."""
         if signal not in self.checkboxes:
             return
@@ -93,8 +98,9 @@ class PlotView(QDockWidget):
 
         # Удаляем виджет-контейнер
         container_widget = self.checkboxes[signal].parentWidget()
-        container_widget.setParent(None)
-        container_widget.deleteLater()
+        if container_widget:
+            container_widget.setParent(None)
+            container_widget.deleteLater()
 
         self.checkboxes.pop(signal)
         self.color_buttons.pop(signal)
@@ -102,34 +108,34 @@ class PlotView(QDockWidget):
         if signal in self.signal_plot_items:
             self.hide_signal(signal)
 
-    def _on_checkbox_state_changed(self, signal, state):
+    def _on_checkbox_state_changed(self, signal: Signal, state: int) -> None:
         if state == Qt.CheckState.Checked.value:
             self.display_signal(signal)
         else:
             self.hide_signal(signal)
 
-    def _on_color_button_clicked(self, signal):
+    def _on_color_button_clicked(self, signal: Signal) -> None:
         current_color = QColor(*signal.color)
         color = QColorDialog.getColor(current_color, self, "Выберите цвет")
 
         if color.isValid():
             signal.set_color((color.red(), color.green(), color.blue()))
 
-    def display_signal(self, signal: Signal):
+    def display_signal(self, signal: Signal) -> None:
         if signal in self.signal_plot_items:
             return
         
         plot_item = self.plot_widget.add_plot(signal.t, signal.y, signal.color)
         self.signal_plot_items[signal] = plot_item
 
-    def hide_signal(self, signal: Signal):
+    def hide_signal(self, signal: Signal) -> None:
         if signal not in self.signal_plot_items:
             return
 
         plot_item = self.signal_plot_items.pop(signal)
         self.plot_widget.remove_plot(plot_item)
 
-    def update_displayed_signal(self, signal: Signal):
+    def update_displayed_signal(self, signal: Signal) -> None:
         # Обновляем график, если сигнал на нем отображен
         if signal in self.signal_plot_items:
             plot_item = self.signal_plot_items[signal]

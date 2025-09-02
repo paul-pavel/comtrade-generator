@@ -1,11 +1,23 @@
+from __future__ import annotations
+
+from typing import Any, Dict, Tuple
 import numpy as np
+from numpy.typing import NDArray
 from asteval import Interpreter
 
-def generate_signal_data(params, equation, duration=2.0, sampling_rate=4000):
-    """Генерирует временной ряд и значения сигнала, используя уравнение."""
-    t = np.linspace(0, duration, int(sampling_rate * duration), endpoint=False)
-    
-    # Создаем безопасный интерпретатор
+
+def generate_signal_data(
+    params: Dict[str, Any],
+    equation: str,
+    duration: float = 2.0,
+    sampling_rate: int = 4000,
+) -> Tuple[NDArray[np.floating], NDArray[np.floating]]:
+    """Генерирует временной ряд и значения сигнала, используя уравнение.
+
+    Всегда возвращает массивы numpy одинаковой длины.
+    """
+    t: NDArray[np.floating] = np.linspace(0, duration, int(sampling_rate * duration), endpoint=False)
+
     aeval = Interpreter()
     
     # Добавляем numpy и временной ряд в контекст
@@ -22,12 +34,18 @@ def generate_signal_data(params, equation, duration=2.0, sampling_rate=4000):
 
     # Вычисляем уравнение
     try:
-        y = aeval.eval(equation)
-        # Проверка, что результат является массивом numpy
-        if not isinstance(y, (np.ndarray, int, float)):
-             raise ValueError("Результат уравнения имеет неверный тип")
-    except Exception as e:
+        y_obj = aeval.eval(equation)
+        if not isinstance(y_obj, (np.ndarray, int, float)):
+            raise ValueError("Результат уравнения имеет неверный тип")
+        y_arr: NDArray[np.floating] = np.asarray(y_obj, dtype=float)
+        if y_arr.shape != t.shape:
+            # Пытаемся broadcast / привести к нужной длине
+            try:
+                y_arr = np.broadcast_to(y_arr, t.shape).astype(float, copy=False)
+            except ValueError:
+                raise ValueError("Размер результата уравнения не соответствует размеру времени")
+    except Exception as e:  # noqa: BLE001 - хотим показывать любые ошибки расчёта
         print(f"Ошибка при вычислении уравнения: {e}")
-        y = np.zeros_like(t) # Возвращаем нулевой сигнал в случае ошибки
-        
-    return t, y
+        y_arr = np.zeros_like(t, dtype=float)
+
+    return t, y_arr
