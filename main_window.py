@@ -6,18 +6,24 @@ from PySide6.QtCore import Qt
 from widgets.params_widget import ParamsWidget
 from plot_view import PlotView
 from signal_model import Signal
+from signal_library import SignalLibrary
 from floating_window import FloatingPlotWindow
+import json
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Генератор сигналов")
-        self.signals = [] # Центральная библиотека сигналов
+        self.signal_library = SignalLibrary()
         self.plot_views = []
-        self.plot_counter = 0
         self.floating_windows = []
 
-        # Включаем расширенные возможности стыковки
+        self.init_ui()
+        self.create_menu()
+        self.create_plot_view()
+
+    def init_ui(self):
+        """Инициализация пользовательского интерфейса главного окна."""
         self.setDockOptions(QMainWindow.AllowTabbedDocks | QMainWindow.AllowNestedDocks)
 
         # --- Панель параметров (слева) ---
@@ -26,44 +32,33 @@ class MainWindow(QMainWindow):
         # --- Библиотека сигналов (слева) ---
         self.setup_library_dock()
 
-        # --- Меню ---
-        self.setup_main_menu()
-
-        self.create_new_plot_view(self)
-
         self.resize(1400, 800)
 
-    def setup_main_menu(self):
+    def create_menu(self):
+        """Создает меню приложения."""
         menu = self.menuBar()
         file_menu = menu.addMenu("Файл")
         
         new_plot_action = QAction("Новый график", self)
-        # При вызове из главного окна, цель - само главное окно
-        new_plot_action.triggered.connect(lambda: self.create_new_plot_view(self))
+        new_plot_action.triggered.connect(lambda: self.create_plot_view())
         file_menu.addAction(new_plot_action)
 
         new_float_win_action = QAction("Новое плавающее окно", self)
         new_float_win_action.triggered.connect(self.create_floating_window)
         file_menu.addAction(new_float_win_action)
 
-    def create_floating_window(self):
-        count = len(self.floating_windows) + 1
-        title = f"Плавающее окно {count}"
-        floating_win = FloatingPlotWindow(title, self)
-        self.floating_windows.append(floating_win)
-        floating_win.setGeometry(self.geometry().x() + 50, self.geometry().y() + 50, 800, 600)
-        floating_win.show()
-
-    def on_floating_window_closed(self, window):
-        if window in self.floating_windows:
-            self.floating_windows.remove(window)
+    def create_plot_view(self):
+        """Создает и добавляет новое окно с графиком."""
+        plot_view = PlotView(f"График {len(self.plot_views) + 1}", self, self.signal_library)
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, plot_view)
+        self.plot_views.append(plot_view)
 
     def setup_params_dock(self):
         params_dock = QDockWidget("Параметры сигнала", self)
         params_dock.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
         
         self.params_widget = ParamsWidget()
-        self.params_widget.add_button.clicked.connect(self.add_signal_to_library)
+        self.params_widget.add_button.clicked.connect(self.add_signal)
         self.params_widget.update_button.clicked.connect(self.update_signal_in_library)
         
         params_dock.setWidget(self.params_widget)
@@ -80,36 +75,36 @@ class MainWindow(QMainWindow):
         library_layout.addWidget(self.library_list_widget)
 
         delete_lib_button = QPushButton("Удалить из библиотеки")
-        delete_lib_button.clicked.connect(self.remove_signal_from_library)
+        delete_lib_button.clicked.connect(self.remove_signal)
         library_layout.addWidget(delete_lib_button)
 
         library_dock.setWidget(library_widget)
         self.addDockWidget(Qt.LeftDockWidgetArea, library_dock)
 
-    def create_new_plot_view(self, target_window):
-        self.plot_counter += 1
-        title = f"График {self.plot_counter}"
-        
-        plot_view = PlotView(title, target_window)
-        
-        self.plot_views.append(plot_view)
-        target_window.addDockWidget(Qt.RightDockWidgetArea, plot_view)
-        
-        # Сразу обновляем список доступных сигналов для нового графика
-        plot_view.update_signal_list(self.signals)
+    def create_floating_window(self):
+        count = len(self.floating_windows) + 1
+        title = f"Плавающее окно {count}"
+        floating_win = FloatingPlotWindow(title, self)
+        self.floating_windows.append(floating_win)
+        floating_win.setGeometry(self.geometry().x() + 50, self.geometry().y() + 50, 800, 600)
+        floating_win.show()
 
-    def add_signal_to_library(self):
+    def on_floating_window_closed(self, window):
+        if window in self.floating_windows:
+            self.floating_windows.remove(window)
+
+    def add_signal(self):
+        """Добавляет новый сигнал в библиотеку."""
         params, equation = self.params_widget.get_params_and_equation()
         new_signal = Signal(params, equation)
-        self.signals.append(new_signal)
+        self.signal_library.add_signal(new_signal)
         self.library_list_widget.addItem(new_signal.name)
-        self._update_all_plot_views()
 
     def update_signal_in_library(self):
         current_row = self.library_list_widget.currentRow()
         if current_row == -1: return
 
-        signal_to_update = self.signals[current_row]
+        signal_to_update = self.signal_library[current_row]
         params, equation = self.params_widget.get_params_and_equation()
         signal_to_update.update(params, equation)
 
@@ -118,27 +113,18 @@ class MainWindow(QMainWindow):
         for pv in self.plot_views:
             pv.update_displayed_signal(signal_to_update)
 
-    def remove_signal_from_library(self):
+    def remove_signal(self):
+        """Удаляет сигнал из библиотеки и обновляет графики."""
         current_row = self.library_list_widget.currentRow()
         if current_row == -1: return
 
-        # Перед удалением сигнала из данных, нужно скрыть его со всех графиков
-        signal_to_remove = self.signals[current_row]
-        for pv in self.plot_views:
-            pv.hide_signal(signal_to_remove)
-
-        self.signals.pop(current_row)
+        signal_to_remove = self.signal_library[current_row]
+        self.signal_library.remove_signal(signal_to_remove)
         self.library_list_widget.takeItem(current_row)
-        
-        # Затем обновить списки чекбоксов на всех графиках
-        self._update_all_plot_views()
 
     def load_signal_to_params(self, item):
         row = self.library_list_widget.row(item)
         if row > -1:
-            signal = self.signals[row]
+            signal = self.signal_library[row]
             self.params_widget.set_params(signal.params)
 
-    def _update_all_plot_views(self):
-        for pv in self.plot_views:
-            pv.update_signal_list(self.signals)

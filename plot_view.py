@@ -7,10 +7,12 @@ import pyqtgraph as pg
 
 from widgets.plot_widget import PlotWidget
 from signal_model import Signal
+from signal_library import SignalLibrary
 
 class PlotView(QDockWidget):
-    def __init__(self, title, parent):
+    def __init__(self, title, parent, signal_library: SignalLibrary):
         super().__init__(title, parent)
+        self.signal_library = signal_library
         self.signal_plot_items = {} # {Signal: plot_item}
         self.checkboxes = {} # {Signal: QCheckBox}
         self.color_buttons = {} # {Signal: QPushButton}
@@ -40,56 +42,65 @@ class PlotView(QDockWidget):
         self.setAllowedAreas(Qt.DockWidgetArea.AllDockWidgetAreas)
         self.setFeatures(QDockWidget.DockWidgetFeature.DockWidgetMovable | QDockWidget.DockWidgetFeature.DockWidgetFloatable | QDockWidget.DockWidgetFeature.DockWidgetClosable)
 
-    def update_signal_list(self, all_signals):
-        """Обновляет список чекбоксов на основе общей библиотеки сигналов."""
-        # Удаляем чекбоксы для сигналов, которых больше нет в библиотеке
-        for signal in list(self.checkboxes.keys()):
-            if signal not in all_signals:
-                # Отключаемся от сигнала
-                if signal in self.signal_connections:
-                    try:
-                        signal.updated.disconnect(self.signal_connections.pop(signal))
-                    except (RuntimeError, TypeError):
-                        # Соединение могло быть уже удалено или иметь неверный тип
-                        pass
+        # Подключаемся к сигналам библиотеки
+        self.signal_library.signal_added.connect(self._add_signal_widget)
+        self.signal_library.signal_removed.connect(self._remove_signal_widget)
 
-                # Удаляем виджет-контейнер
-                container_widget = self.checkboxes[signal].parentWidget()
-                container_widget.setParent(None)
-                container_widget.deleteLater()
+        # Инициализируем виджеты для уже существующих сигналов
+        for signal in self.signal_library.get_all_signals():
+            self._add_signal_widget(signal)
 
-                self.checkboxes.pop(signal)
-                self.color_buttons.pop(signal)
+    def _add_signal_widget(self, signal: Signal):
+        """Добавляет виджет для управления сигналом."""
+        if signal in self.checkboxes:
+            return
 
-                if signal in self.signal_plot_items:
-                    self.hide_signal(signal)
+        container = QWidget()
+        layout = QHBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
 
-        # Добавляем чекбоксы для новых сигналов
-        for signal in all_signals:
-            if signal not in self.checkboxes:
-                container = QWidget()
-                layout = QHBoxLayout(container)
-                layout.setContentsMargins(0, 0, 0, 0)
+        checkbox = QCheckBox(signal.name)
+        checkbox.stateChanged.connect(partial(self._on_checkbox_state_changed, signal))
+        
+        color_button = QPushButton()
+        color_button.setFixedSize(24, 24)
+        color_button.setStyleSheet(f"background-color: rgb{signal.color}; border: 1px solid black;")
+        color_button.clicked.connect(partial(self._on_color_button_clicked, signal))
 
-                checkbox = QCheckBox(signal.name)
-                checkbox.stateChanged.connect(partial(self._on_checkbox_state_changed, signal))
-                
-                color_button = QPushButton()
-                color_button.setFixedSize(24, 24)
-                color_button.setStyleSheet(f"background-color: rgb{signal.color}; border: 1px solid black;")
-                color_button.clicked.connect(partial(self._on_color_button_clicked, signal))
+        layout.addWidget(checkbox)
+        layout.addWidget(color_button)
+        
+        self.checkbox_layout.insertWidget(self.checkbox_layout.count() - 1, container)
+        self.checkboxes[signal] = checkbox
+        self.color_buttons[signal] = color_button
 
-                layout.addWidget(checkbox)
-                layout.addWidget(color_button)
-                
-                self.checkbox_layout.insertWidget(self.checkbox_layout.count() - 1, container)
-                self.checkboxes[signal] = checkbox
-                self.color_buttons[signal] = color_button
+        # Подключаемся к сигналу updated
+        connection = partial(self.update_displayed_signal, signal)
+        signal.updated.connect(connection)
+        self.signal_connections[signal] = connection
 
-                # Подключаемся к сигналу updated
-                connection = partial(self.update_displayed_signal, signal)
-                signal.updated.connect(connection)
-                self.signal_connections[signal] = connection
+    def _remove_signal_widget(self, signal: Signal):
+        """Удаляет виджет для управления сигналом."""
+        if signal not in self.checkboxes:
+            return
+
+        # Отключаемся от сигнала
+        if signal in self.signal_connections:
+            try:
+                signal.updated.disconnect(self.signal_connections.pop(signal))
+            except (RuntimeError, TypeError):
+                pass
+
+        # Удаляем виджет-контейнер
+        container_widget = self.checkboxes[signal].parentWidget()
+        container_widget.setParent(None)
+        container_widget.deleteLater()
+
+        self.checkboxes.pop(signal)
+        self.color_buttons.pop(signal)
+
+        if signal in self.signal_plot_items:
+            self.hide_signal(signal)
 
     def _on_checkbox_state_changed(self, signal, state):
         if state == Qt.CheckState.Checked.value:
